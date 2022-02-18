@@ -30,6 +30,6 @@
         <Slider x:Name="Distance"   Grid.Row="1"  Grid.Column="3" ValueChanged="JawPitchRoll_ValueChanged" Maximum="2" Value="1" Minimum="0.001" StepFrequency="0.001" />
 
 
-        <Border Grid.Row="2" Grid.ColumnSpan="4" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" x:Name="root" Background="red" />
+        <Border Grid.Row="2" Grid.ColumnSpan="4" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" x:Name="root" />
     </Grid>
 </UserControl>

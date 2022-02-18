@@ -19,7 +19,7 @@
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition/>
+            <ColumnDefinition MaxWidth="300"/>
             <ColumnDefinition/>
         </Grid.ColumnDefinitions>
 
@@ -47,7 +47,7 @@
                 <ColumnDefinition/>
             </Grid.ColumnDefinitions>
             <controls:PixelSelector Tile="{Binding}" SelectedLayer="{Binding SelectedIndex, ElementName=FragmentList}" />
-            <StackPanel Grid.Column="1">
+            <StackPanel Grid.Row="1" Grid.Column="1">
                 <Button Content="Add Fragment" Command="{Binding AddFragmentCommand}"/>
                 <ListBox  ItemsSource="{Binding Fragments}" x:Name="FragmentList"                    ></ListBox>
             </StackPanel>
@@ -60,82 +60,8 @@
                 </StackPanel>
             </Grid>
 
-            <Grid Grid.Row="1" Grid.Column="1" >
-                <!--<Grid.Transform3D>
-                    <PerspectiveTransform3D >
-                        
-                    </PerspectiveTransform3D>
-                </Grid.Transform3D>-->
-                <Grid.DataContext>
-                    <viewmodels:TileProjectionViewmodel Tile="{Binding SelectedItem, ElementName=tileset}" />
-                </Grid.DataContext>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="*"/>
-                    <!--<RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>-->
-                </Grid.RowDefinitions>
+            <controls:ProjectControl Grid.Row="0" Grid.Column="1" Tile="{Binding SelectedItem, ElementName=tileset}" />
 
-                <!--<Slider Grid.Row="0" x:Name="Z" Maximum="360"/>
-                <Slider Grid.Row="1" Value="320" x:Name="Y" Maximum="360"/>
-                <Slider Grid.Row="2" Value="290" x:Name="X" Maximum="360"/>
-
-                <Slider Grid.Row="3" x:Name="ZTranslate" Maximum="360"/>
-                <Slider Grid.Row="4" x:Name="YTranslate" Maximum="360"/>
-                <Slider Grid.Row="5" x:Name="XTranslate" Maximum="360"/>-->
-
-                <controls:ProjectControl Tile="{Binding SelectedItem, ElementName=tileset }">
-                    
-                </controls:ProjectControl>
-
-                <!--<Grid Grid.Row="6">
-                    <Grid.Transform3D>
-                        <CompositeTransform3D
-                            CenterX="16"
-                            CenterY="16"
-                            CenterZ="16"
-                            RotationZ="{Binding Value, ElementName=Z}" RotationX="{Binding Value, ElementName=X}" RotationY="{Binding Value, ElementName=Y}" 
-                            TranslateX="{Binding Value,ElementName=XTranslate}" TranslateZ="{Binding Value,ElementName=ZTranslate}" TranslateY="{Binding Value,ElementName=YTranslate}"
-                            />
-                    </Grid.Transform3D>
-                    
-                <ItemsControl   ItemsSource="{Binding Fragments}"  >
-                    
-                    --><!--<ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <Grid></Grid>
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>--><!--
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <RelativePanel />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Image Source="{Binding ImageSource}" Transform3D="{Binding Transform}" Width="128" Height="128" ></Image>
-                                
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-                    <Canvas>
-                        <Line X1="0" X2="0" Y1="-200" Y2="300" Stroke="Red" />
-                        <Line X1="128" X2="128" Y1="-200" Y2="300" Stroke="Red" />
-                        <Line X1="64" X2="64" Y1="-200" Y2="300" Stroke="LightBlue" />
-                        <Line X1="-64" X2="-64" Y1="-200" Y2="300" Stroke="LightBlue" />
-                        <Line X1="192" X2="192" Y1="-200" Y2="300" Stroke="LightBlue" />
-
-                        <Line Y1="0"   Y2="0"   X1="-200" X2="300" Stroke="Red" />
-                        <Line Y1="128" Y2="128" X1="-200" X2="300" Stroke="Red" />
-                        <Line Y1="64"  Y2="64"  X1="-200" X2="300" Stroke="LightBlue" />
-                        <Line Y1="-64" Y2="-64" X1="-200" X2="300" Stroke="LightBlue" />
-                        <Line Y1="192" Y2="192" X1="-200" X2="300" Stroke="LightBlue" />
-                    </Canvas>
-                </Grid>-->
-            </Grid>
 
         </Grid>
 

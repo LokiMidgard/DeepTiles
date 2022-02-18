@@ -71,7 +71,9 @@ internal abstract partial class TileImage
         public static TileImage FromStream(Stream stream)
         {
 
-            return new FileImage(Image.FromStream(stream));
+            var b = new Bitmap( Image.FromStream(stream));
+            //b.MakeTransparent();
+            return new FileImage(b);
         }
         public static async Task<TileImage?> Pick()
         {

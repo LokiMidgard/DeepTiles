@@ -280,6 +280,20 @@ public class ImageLoader
 
         return surface;
     }
+    public ManagedSurface LoadLine(float length, Color color)
+    {
+        ManagedSurface surface = new ManagedSurface(CreateSurface(new Size(1, length)));
+        var ignored = surface.Draw(_graphicsDevice, _drawingLock, new LineDrawer(length, color));
+
+        return surface;
+    }
+    public ManagedSurface LoadRectangle(Size size, Color color)
+    {
+        ManagedSurface surface = new ManagedSurface(CreateSurface(size));
+        var ignored = surface.Draw(_graphicsDevice, _drawingLock, new RectangleDrawer(size, color));
+
+        return surface;
+    }
 
     public ManagedSurface LoadText(string text, Size size, CanvasTextFormat textFormat, Color textColor, Color bgColor)
     {
@@ -351,6 +365,71 @@ public class ImageLoader
     }
 }
 
+
+internal class LineDrawer : IContentDrawer
+{
+    private float _length;
+    private Color _color;
+
+    public LineDrawer(float length, Color color)
+    {
+        _length = length;
+        _color = color;
+    }
+
+    public float Length
+    {
+        get { return _length; }
+    }
+
+    public Color Color
+    {
+        get { return _color; }
+    }
+
+    public Task Draw(CompositionGraphicsDevice device, Object drawingLock, CompositionDrawingSurface surface, Size size)
+    {
+        using (var ds = CanvasComposition.CreateDrawingSession(surface))
+        {
+            ds.Clear(Microsoft.UI.Colors.Transparent);
+            ds.DrawLine(new Vector2(), new Vector2(0, Length), _color);
+            //ds.FillCircle(new Vector2(_radius, _radius), _radius, _color);
+        }
+        return Task.CompletedTask;
+    }
+}
+internal class RectangleDrawer : IContentDrawer
+{
+    private Size _length;
+    private Color _color;
+
+    public RectangleDrawer(Size length, Color color)
+    {
+        _length = length;
+        _color = color;
+    }
+
+    public Size Length
+    {
+        get { return _length; }
+    }
+
+    public Color Color
+    {
+        get { return _color; }
+    }
+
+    public Task Draw(CompositionGraphicsDevice device, Object drawingLock, CompositionDrawingSurface surface, Size size)
+    {
+        using (var ds = CanvasComposition.CreateDrawingSession(surface))
+        {
+            ds.Clear(Microsoft.UI.Colors.Transparent);
+            ds.DrawRectangle(new (0,0, _length.Width,_length.Height), _color);
+            //ds.FillCircle(new Vector2(_radius, _radius), _radius, _color);
+        }
+        return Task.CompletedTask;
+    }
+}
 
 internal class CircleDrawer : IContentDrawer
 {
@@ -430,7 +509,9 @@ public class BitmapDrawer : IContentDrawer
         SoftwareBitmap softwareBitmap;
 
         using var memory = new MemoryStream();
-        await Task.Run(() => image.Save(memory, System.Drawing.Imaging.ImageFormat.Png));
+        //await Task.Run(() =>
+        image.Save(memory, System.Drawing.Imaging.ImageFormat.Png);
+        //);
         memory.Seek(0, SeekOrigin.Begin);
 
         BitmapDecoder decoder = await BitmapDecoder.CreateAsync(memory.AsRandomAccessStream());

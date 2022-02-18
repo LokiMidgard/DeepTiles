@@ -19,7 +19,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="SourceGenerators.AutoNotify" Version="1.1.0" />
+		<PackageReference Include="SourceGenerators.AutoNotify" Version="1.2.0" />
 		<PackageReference Include="Microsoft.Graphics.Win2D" Version="1.0.0.30" />
 	</ItemGroup>
 

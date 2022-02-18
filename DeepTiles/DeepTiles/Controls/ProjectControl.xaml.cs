@@ -18,6 +18,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -56,7 +57,9 @@ namespace DeepTiles.Controls
         private Bitmap[] fragmentLayers = Array.Empty<Bitmap>();
         private ExpressionNode _opacityExpression;
         private ContainerVisual cameraVisual;
-        private readonly Dictionary<Bitmap, (ManagedSurface surface, SpriteVisual sprite)> surfaces = new();
+        private readonly Dictionary<Bitmap, SpriteHandler> surfaces = new();
+        private readonly Dictionary<Bitmap, TileFragment> fragments = new();
+        private readonly Color transparancy;
 
         private static void TileChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
@@ -76,10 +79,6 @@ namespace DeepTiles.Controls
 
                 oldValue.FragmentMask.MaskChanged += me.FragmentMaskChanged;
                 (oldValue.Fragments as INotifyCollectionChanged).CollectionChanged -= me.FragmentCollectionChanged;
-                foreach (var fragment in oldValue.Fragments)
-                {
-                    fragment.PropertyChanged -= me.FragmentMetadataChanged;
-                }
             }
             if (newValue is not null)
             {
@@ -88,42 +87,22 @@ namespace DeepTiles.Controls
                 {
                     var bmp = new Bitmap(newValue.Image.ImageX);
                     me.fragmentLayers[fragmentIndex] = bmp;
+                    me.fragments[bmp] = me.Tile.Fragments[fragmentIndex];
                     for (int y = 0; y < newValue.FragmentMask.Height; y++)
                         for (int x = 0; x < newValue.FragmentMask.Width; x++)
                             if (newValue.FragmentMask[x, y] != fragmentIndex)
                             {
-                                bmp.SetPixel(x, y, Color.Transparent);
+                                bmp.SetPixel(x, y, me.transparancy);
                             }
                 }
                 newValue.FragmentMask.MaskChanged += me.FragmentMaskChanged;
                 (newValue.Fragments as INotifyCollectionChanged).CollectionChanged += me.FragmentCollectionChanged;
 
-                foreach (var fragment in newValue.Fragments)
-                {
-                    fragment.PropertyChanged += me.FragmentMetadataChanged;
-                }
                 me.UpdateFragmentLayerImage(me.fragmentLayers);
 
             }
         }
 
-        private void FragmentMetadataChanged(object? sender, PropertyChangedEventArgs e)
-        {
-            // Offset or Angle chnanged Not Mask
-
-            //var tileFragment = (TileFragment) sender;
-            //var fragmentImage = this this.fragmentLayers[tileFragment.inde];
-            //if (Tile.FragmentMask[e.X, e.Y] == e.FragmentIndex)
-            //{
-            //    fragmentImage.SetPixel(e.X, e.Y, tileImage.GetPixel(e.X, e.Y));
-            //}
-            //else
-            //{
-            //    fragmentImage.SetPixel(e.X, e.Y, Color.Transparent);
-            //}
-            //UpdateFragmentLayerImage(fragmentImage);
-
-        }
 
         private void FragmentCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
@@ -146,16 +125,18 @@ namespace DeepTiles.Controls
                 // inert new items 
                 for (int i = 0; i < e.NewItems.Count; i++)
                 {
-                    var bmp = new Bitmap(Tile.Image.ImageX);
+                    Bitmap original = AsBitmap(Tile.Image.ImageX);
+                    var bmp = new Bitmap(original.Width, original.Height);
                     int fragmentIndex = i + e.NewStartingIndex;
+                    this.fragments[bmp] = this.Tile.Fragments[fragmentIndex];
                     fragmentLayers[fragmentIndex] = bmp;
+                    var transparentPixel = bmp.GetPixel(0,0);
                     for (int y = 0; y < Tile.FragmentMask.Height; y++)
                         for (int x = 0; x < Tile.FragmentMask.Width; x++)
-                            if (Tile.FragmentMask[x, y] != fragmentIndex)
+                            if (Tile.FragmentMask[x, y] == fragmentIndex)
                             {
-                                bmp.SetPixel(x, y, Color.Transparent);
+                                bmp.SetPixel(x, y, original.GetPixel(x, y));
                             }
-                    Tile.Fragments[fragmentIndex].PropertyChanged += FragmentMetadataChanged;
                 }
                 UpdateFragmentLayerImage(fragmentLayers[e.NewStartingIndex..]);
 
@@ -170,52 +151,135 @@ namespace DeepTiles.Controls
             {
                 if (this.surfaces.TryGetValue(fragmentImages.Span[i], out var t))
                 {
-                    var (surface, sprite) = t;
-
-                    _worldContainer.Children.Remove(sprite);
-                    sprite.Dispose();
-                    surface.Dispose();
+                    t.Dispose();
                     this.surfaces.Remove(fragmentImages.Span[i]);
                 }
+            }
+        }
+        private class SpriteHandler : IDisposable
+        {
+            private bool disposedValue;
+            private ManagedSurface? surface;
+            private SpriteVisual? sprite;
+            private readonly ProjectControl projectControl;
+            internal TileFragment TileFragment { get; private set; }
+
+            public CancellationToken CancellationToken => cancellationTokenSource.Token;
+            private CancellationTokenSource cancellationTokenSource = new();
+
+            public SpriteHandler(ProjectControl projectControl, TileFragment tileFragment)
+            {
+                this.projectControl = projectControl;
+                this.TileFragment = tileFragment;
+                this.TileFragment.PropertyChanged += TileFragment_PropertyChanged;
+            }
+
+            private void TileFragment_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+            {
+                this.UpdateTileLayout();
+            }
+
+            public SpriteVisual? Sprite { get => sprite; private set => sprite = value; }
+
+            [DisallowNull]
+            public ManagedSurface? Surface
+            {
+                get => surface; set
+                {
+                    if (!disposedValue)
+                    {
+                        if (projectControl.Tile is null)
+                            return;
+                        surface = value;
+
+                        this.Sprite = projectControl.AddImage(surface.Brush);
+                        this.Sprite.AnchorPoint = new Vector2(0.5f, 1);
+
+                        UpdateTileLayout();
+
+                    }
+                    else
+                        value.Dispose();
+                }
+            }
+
+            private void UpdateTileLayout()
+            {
+                if (projectControl.Tile is null || this.Sprite is null)
+                    return;
+
+                // stretsch tile
+                //var lerp = MathF.Abs(TileFragment.Angle - 45) / 45f;
+                //var currentStretch = ((MathF.Sqrt(2)-1) * lerp) +1;
+                var alpha = MathF.PI * 2 * this.TileFragment.Angle / 360;
+                var gamma = MathF.PI / 4;
+                var betta = MathF.PI - alpha - gamma;
+                var b = MathF.Sqrt(2);
+
+                var a = MathF.Sin(alpha) * b / MathF.Sin(betta);
+                var currentStretch = MathF.Sin(gamma) * a / MathF.Sin(alpha);
+                if (this.TileFragment.Angle == 0)
+                    currentStretch = MathF.Sqrt(2);
+
+                this.Sprite.Scale = new Vector3(1, currentStretch, currentStretch);
+
+
+                var flatTIleLength = this.projectControl.Tile.Height * MathF.Sqrt(2);
+                this.Sprite.Offset = new Vector3(0, flatTIleLength / 2 + TileFragment.Offset * projectControl.Tile.Height * currentStretch, TileFragment.Offset * projectControl.Tile.Height * currentStretch);
+                this.Sprite.RotationAngleInDegrees = -TileFragment.Angle;
+                this.Sprite.RotationAxis = Vector3.UnitX;
+
+            }
+
+            protected virtual void Dispose(bool disposing)
+            {
+                if (!disposedValue)
+                {
+                    if (disposing)
+                    {
+                        cancellationTokenSource.Cancel();
+                        this.TileFragment.PropertyChanged -= TileFragment_PropertyChanged;
+                        if (Sprite is not null)
+                            projectControl._worldContainer.Children.Remove(Sprite);
+                        Sprite?.Dispose();
+                        Surface?.Dispose();
+                    }
+
+                    disposedValue = true;
+                }
+            }
+
+
+            public void Dispose()
+            {
+                // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+                Dispose(disposing: true);
+                GC.SuppressFinalize(this);
             }
         }
         private async void UpdateFragmentLayerImage(ReadOnlyMemory<Bitmap> fragmentImages)
         {
             for (int i = 0; i < fragmentImages.Length; i++)
             {
-                if (!this.surfaces.TryGetValue(fragmentImages.Span[i], out var t))
-                {
-                    var managedSurface = await ImageLoader.Instance.LoadFromImageAsync(fragmentLayers[i], new Windows.Foundation.Size(32, 32));
-                    var sprite = AddImage(managedSurface.Brush);
-                    this.surfaces[fragmentLayers[i]] = (managedSurface, sprite);
-                }
-                else
-                {
-                    var (surface, sprite) = t;
-
-                    _worldContainer.Children.Remove(sprite);
-                    sprite.Dispose();
-                    surface.Dispose();
-
-                    surface = await ImageLoader.Instance.LoadFromImageAsync(fragmentLayers[i], new Windows.Foundation.Size(32, 32));
-                    sprite = AddImage(surface.Brush);
-                    this.surfaces[fragmentLayers[i]] = (surface, sprite);
-                }
-
+                if (this.surfaces.TryGetValue(fragmentImages.Span[i], out var t))
+                    t.Dispose();
+                var handler = new SpriteHandler(this, this.fragments[fragmentImages.Span[i]]);
+                this.surfaces[fragmentLayers[i]] = handler;
+                handler.Surface = await ImageLoader.Instance.LoadFromImageAsync(fragmentImages.Span[i], new Windows.Foundation.Size(32, 32));
             }
         }
-
+        private static Bitmap AsBitmap(Image image)
+        {
+            if (image is Bitmap bmp)
+                return bmp;
+            return new Bitmap(image);
+        }
         private void FragmentMaskChanged(object? sender, MaskChangedEventArgs e)
         {
             if (Tile is null)
                 return;
 
-            static Bitmap AsBitmap(Image image)
-            {
-                if (image is Bitmap bmp)
-                    return bmp;
-                return new Bitmap(image);
-            }
+
 
             var tileImage = AsBitmap(Tile.Image.ImageX);
             var fragmentImage = this.fragmentLayers[e.FragmentIndex];
@@ -225,7 +289,7 @@ namespace DeepTiles.Controls
             }
             else
             {
-                fragmentImage.SetPixel(e.X, e.Y, Color.Transparent);
+                fragmentImage.SetPixel(e.X, e.Y, this.transparancy);
             }
             UpdateFragmentLayerImage(fragmentImage);
         }
@@ -255,12 +319,11 @@ namespace DeepTiles.Controls
             //Matrix4x4.CreatePerspectiveFieldOfView(MathF.PI / 2, 1, 0.001f, 128)
             //Matrix4x4.CreatePerspective(48, 48, 0.001f, 48)
             //perspectiveMatrix
-            Matrix4x4.CreateOrthographic(cameraDistance, cameraDistance, 0.001f, 48)
+            Matrix4x4.CreateFromYawPitchRoll((float)this.Yaw.Value * 2, (float)this.Pitch.Value * 2, (float)this.Roll.Value * 4)
             *
-            Matrix4x4.CreateFromYawPitchRoll((float)this.Yaw.Value*2, (float)this.Pitch.Value * 2, (float)this.Roll.Value*4)
+            Matrix4x4.CreateLookAt(new Vector3(0, 128, 128), new Vector3(0, 0, 0), new Vector3(0, 1, 0))
             *
-            Matrix4x4.CreateLookAt(new Vector3(0, 0, cameraDistance),
-            new Vector3(0, 0, 0), new Vector3(0, 1, 0))
+            Matrix4x4.CreateOrthographic(cameraDistance, cameraDistance, 0.001f, 248)
             ;
 
 
@@ -270,6 +333,9 @@ namespace DeepTiles.Controls
         {
             this.InitializeComponent();
             this.Loaded += ProjectControl_Loaded;
+            var bmp = new Bitmap(1,1);
+            this.transparancy = Color.Blue;
+
         }
 
         private async void ProjectControl_Loaded(object sender, RoutedEventArgs e)
@@ -299,6 +365,7 @@ namespace DeepTiles.Controls
             //
 
             _worldContainer = _compositor.CreateContainerVisual();
+
             //_worldContainer.Offset = new Vector3(0, 0, -900);
             cameraVisual.Children.InsertAtTop(_worldContainer);
 
@@ -306,18 +373,148 @@ namespace DeepTiles.Controls
 
             for (int i = 0; i < fragmentLayers.Length; i++)
             {
-                var managedSurface = await ImageLoader.Instance.LoadFromImageAsync(fragmentLayers[i], new Windows.Foundation.Size(32, 32));
-                var sprite = AddImage(managedSurface.Brush);
-                this.surfaces[fragmentLayers[i]] = (managedSurface, sprite);
+                var handler = new SpriteHandler(this, this.Tile.Fragments[i]);
+                this.surfaces[fragmentLayers[i]] = handler;
+                handler.Surface = await ImageLoader.Instance.LoadFromImageAsync(fragmentLayers[i], new Windows.Foundation.Size(32, 32));
             }
 
+            var planeLine = ImageLoader.Instance.LoadLine(148, Windows.UI.Color.FromArgb(255, 0, 0, 255));
+            for (int i = 0; i < 4; i++)
+            {
+                var sprite = AddImage(planeLine.Brush, true);
+
+                sprite.Offset = new Vector3(i * 32 - 48, 0, 0);
+            }
+            for (int i = 0; i < 4; i++)
+            {
+                var sprite = AddImage(planeLine.Brush, true);
+                sprite.Offset = new Vector3(0, MathF.Sqrt(2) * (i * 32 - 48), 0);
+                sprite.RotationAngleInDegrees = 90;
+            }
+            {
+
+                var xline = ImageLoader.Instance.LoadLine(16, Windows.UI.Color.FromArgb(255, 255, 0, 0));
+                var sprite = AddImage(xline.Brush);
+                sprite.CenterPoint = new Vector3(0, 0, 0);
+                sprite.TransformMatrix = Matrix4x4.Identity
+                    * Matrix4x4.CreateRotationZ(MathF.PI / 2, new Vector3())
+                    //* Matrix4x4.CreateWorld(new Vector3(0,8,0), new Vector3(0,0,1), new Vector3(0,1,0))
+                    ;
+                var yline = ImageLoader.Instance.LoadLine(16, Windows.UI.Color.FromArgb(255, 0, 255, 0));
+                sprite = AddImage(yline.Brush);
+                sprite.CenterPoint = new Vector3(0, 0, 0);
+                sprite.TransformMatrix = Matrix4x4.Identity
+                    //* Matrix4x4.CreateWorld(new Vector3(0,8,0), new Vector3(0,0,1), new Vector3(0,1,0))
+                    ;
+                var zline = ImageLoader.Instance.LoadLine(16, Windows.UI.Color.FromArgb(255, 0, 0, 255));
+                sprite = AddImage(zline.Brush);
+                sprite.CenterPoint = new Vector3(0, 0, 0);
+                sprite.TransformMatrix = Matrix4x4.Identity
+                    * Matrix4x4.CreateRotationX(MathF.PI / 2, new Vector3())
+                    //* Matrix4x4.CreateWorld(new Vector3(0,8,0), new Vector3(0,0,1), new Vector3(0,1,0))        
+                    ;
+
+
+
+
+
+                var rect = ImageLoader.Instance.LoadRectangle(new Windows.Foundation.Size(32, 32), Windows.UI.Color.FromArgb(255, 255, 0, 0));
+                sprite = AddImage(rect.Brush);
+                sprite.TransformMatrix = Matrix4x4.Identity
+                    * Matrix4x4.CreateTranslation(new Vector3(-16, -16, 128))
+                    * Matrix4x4.CreateRotationX(-MathF.PI / 4)
+                    ;
+
+
+                var shortLentgh = MathF.Sqrt(MathF.Pow(Vector3.Transform(new Vector3(16, 16, 128), Matrix4x4.CreateRotationX(-MathF.PI / 4)).Z, 2) * 2);
+                var longLentgh = MathF.Sqrt(MathF.Pow(Vector3.Transform(new Vector3(-16, -16, 128), Matrix4x4.CreateRotationX(-MathF.PI / 4)).Z, 2) * 2);
+
+
+
+                var line = ImageLoader.Instance.LoadLine(128, Windows.UI.Color.FromArgb(255, 255, 0, 255));
+                sprite = AddImage(line.Brush);
+                sprite.CenterPoint = new Vector3(0, 0, 0);
+                sprite.TransformMatrix = Matrix4x4.Identity
+                    * Matrix4x4.CreateRotationX(MathF.PI / 2)
+                    * Matrix4x4.CreateTranslation(new Vector3(+16, +16, 0))
+                    * Matrix4x4.CreateScale(new Vector3(1, 1, shortLentgh / 128))
+                    * Matrix4x4.CreateTranslation(new Vector3(0, 0, 128 - shortLentgh))
+                    * Matrix4x4.CreateRotationX(-MathF.PI / 4)
+                ;
+                sprite = AddImage(line.Brush);
+                sprite.TransformMatrix = Matrix4x4.Identity
+                    * Matrix4x4.CreateRotationY(-MathF.PI / 2)
+                       * Matrix4x4.CreateRotationX(MathF.PI / 2)
+                    * Matrix4x4.CreateTranslation(new Vector3(+16, +16, 0))
+                    * Matrix4x4.CreateScale(new Vector3(1, 1, shortLentgh / 128))
+                    * Matrix4x4.CreateTranslation(new Vector3(0, 0, 128 - shortLentgh))
+                    * Matrix4x4.CreateRotationX(-MathF.PI / 4)
+                    ;
+
+                sprite = AddImage(line.Brush);
+                sprite.TransformMatrix = Matrix4x4.Identity
+                           * Matrix4x4.CreateRotationX(MathF.PI / 2)
+                    * Matrix4x4.CreateTranslation(new Vector3(-16, +16, 0))
+                    * Matrix4x4.CreateScale(new Vector3(1, 1, shortLentgh / 128))
+                    * Matrix4x4.CreateTranslation(new Vector3(0, 0, 128 - shortLentgh))
+                    * Matrix4x4.CreateRotationX(-MathF.PI / 4)
+                    ;
+                sprite = AddImage(line.Brush);
+                sprite.TransformMatrix = Matrix4x4.Identity
+                    * Matrix4x4.CreateRotationY(-MathF.PI / 2)
+                            * Matrix4x4.CreateRotationX(MathF.PI / 2)
+                    * Matrix4x4.CreateTranslation(new Vector3(-16, +16, 0))
+                    * Matrix4x4.CreateScale(new Vector3(1, 1, shortLentgh / 128))
+                    * Matrix4x4.CreateTranslation(new Vector3(0, 0, 128 - shortLentgh))
+                    * Matrix4x4.CreateRotationX(-MathF.PI / 4)
+                    ;
+
+
+                sprite = AddImage(line.Brush);
+                sprite.TransformMatrix = Matrix4x4.Identity
+                   * Matrix4x4.CreateRotationX(MathF.PI / 2)
+                    * Matrix4x4.CreateTranslation(new Vector3(+16, -16, 0))
+                    * Matrix4x4.CreateScale(new Vector3(1, 1, longLentgh / 128))
+                    * Matrix4x4.CreateTranslation(new Vector3(0, 0, 128 - longLentgh))
+                    * Matrix4x4.CreateRotationX(-MathF.PI / 4)
+                    ;
+                sprite = AddImage(line.Brush);
+                sprite.TransformMatrix = Matrix4x4.Identity
+                    * Matrix4x4.CreateRotationY(-MathF.PI / 2)
+                      * Matrix4x4.CreateRotationX(MathF.PI / 2)
+                    * Matrix4x4.CreateTranslation(new Vector3(+16, -16, 0))
+                    * Matrix4x4.CreateScale(new Vector3(1, 1, longLentgh / 128))
+                    * Matrix4x4.CreateTranslation(new Vector3(0, 0, 128 - longLentgh))
+                    * Matrix4x4.CreateRotationX(-MathF.PI / 4)
+                    ;
+
+
+
+                sprite = AddImage(line.Brush);
+                sprite.TransformMatrix = Matrix4x4.Identity
+                 * Matrix4x4.CreateRotationX(MathF.PI / 2)
+                    * Matrix4x4.CreateTranslation(new Vector3(-16, -16, 0))
+                    * Matrix4x4.CreateScale(new Vector3(1, 1, longLentgh / 128))
+                    * Matrix4x4.CreateTranslation(new Vector3(0, 0, 128 - longLentgh))
+                    * Matrix4x4.CreateRotationX(-MathF.PI / 4)
+                    ;
+                sprite = AddImage(line.Brush);
+                sprite.TransformMatrix = Matrix4x4.Identity
+                    * Matrix4x4.CreateRotationY(-MathF.PI / 2)
+                   * Matrix4x4.CreateRotationX(MathF.PI / 2)
+                    * Matrix4x4.CreateTranslation(new Vector3(-16, -16, 0))
+                    * Matrix4x4.CreateScale(new Vector3(1, 1, longLentgh / 128))
+                    * Matrix4x4.CreateTranslation(new Vector3(0, 0, 128 - longLentgh))
+                    * Matrix4x4.CreateRotationX(-MathF.PI / 4)
+                    ;
+            }
 
 
 
         }
 
 
-        private SpriteVisual AddImage(CompositionSurfaceBrush imageBrush, float defaultOpacity = 1.0f, bool applyDistanceEffects = true)
+        private SpriteVisual AddImage(CompositionSurfaceBrush imageBrush, bool center = false)
         {
             var sprite = _compositor.CreateSpriteVisual();
 
@@ -326,10 +523,11 @@ namespace DeepTiles.Controls
             //size.Height *= nodeInfo.Scale;
 
             sprite.Size = new Vector2((float)size.Width, (float)size.Height);
-            sprite.AnchorPoint = new Vector2(0.5f, 0.5f);
+            if (center)
+                sprite.AnchorPoint = new Vector2(0.5f, 0.5f);
             //sprite.Offset = nodeInfo.Offset;
-            
-            _worldContainer.Children.InsertAtTop(sprite);
+
+            _worldContainer.Children.InsertAtBottom(sprite);
 
 
             //if (applyDistanceEffects)
