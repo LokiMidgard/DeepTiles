@@ -85,14 +85,15 @@ namespace DeepTiles.Controls
                 Array.Resize(ref me.fragmentLayers, newValue.Fragments.Count);
                 for (int fragmentIndex = 0; fragmentIndex < newValue.Fragments.Count; fragmentIndex++)
                 {
-                    var bmp = new Bitmap(newValue.Image.ImageX);
+                    var original = AsBitmap(newValue.Image.ImageX);
+                    var bmp = new Bitmap(original.Width, original.Height);
                     me.fragmentLayers[fragmentIndex] = bmp;
                     me.fragments[bmp] = me.Tile.Fragments[fragmentIndex];
                     for (int y = 0; y < newValue.FragmentMask.Height; y++)
                         for (int x = 0; x < newValue.FragmentMask.Width; x++)
-                            if (newValue.FragmentMask[x, y] != fragmentIndex)
+                            if (newValue.FragmentMask[x, y] == fragmentIndex)
                             {
-                                bmp.SetPixel(x, y, me.transparancy);
+                                bmp.SetPixel(x, y, original.GetPixel(x, y));
                             }
                 }
                 newValue.FragmentMask.MaskChanged += me.FragmentMaskChanged;
@@ -130,7 +131,6 @@ namespace DeepTiles.Controls
                     int fragmentIndex = i + e.NewStartingIndex;
                     this.fragments[bmp] = this.Tile.Fragments[fragmentIndex];
                     fragmentLayers[fragmentIndex] = bmp;
-                    var transparentPixel = bmp.GetPixel(0,0);
                     for (int y = 0; y < Tile.FragmentMask.Height; y++)
                         for (int x = 0; x < Tile.FragmentMask.Width; x++)
                             if (Tile.FragmentMask[x, y] == fragmentIndex)
@@ -261,11 +261,13 @@ namespace DeepTiles.Controls
         {
             for (int i = 0; i < fragmentImages.Length; i++)
             {
-                if (this.surfaces.TryGetValue(fragmentImages.Span[i], out var t))
+                Bitmap bmp = fragmentImages.Span[i];
+                if (this.surfaces.TryGetValue(bmp, out var t))
                     t.Dispose();
-                var handler = new SpriteHandler(this, this.fragments[fragmentImages.Span[i]]);
-                this.surfaces[fragmentLayers[i]] = handler;
-                handler.Surface = await ImageLoader.Instance.LoadFromImageAsync(fragmentImages.Span[i], new Windows.Foundation.Size(32, 32));
+            
+                var handler = new SpriteHandler(this, this.fragments[bmp]);
+                this.surfaces[bmp] = handler;
+                handler.Surface = await ImageLoader.Instance.LoadFromImageAsync(bmp, new Windows.Foundation.Size(32, 32));
             }
         }
         private static Bitmap AsBitmap(Image image)
@@ -281,17 +283,26 @@ namespace DeepTiles.Controls
 
 
 
-            var tileImage = AsBitmap(Tile.Image.ImageX);
-            var fragmentImage = this.fragmentLayers[e.FragmentIndex];
+            var original = AsBitmap(Tile.Image.ImageX);
+            var bmp = this.fragmentLayers[e.FragmentIndex];
             if (Tile.FragmentMask[e.X, e.Y] == e.FragmentIndex)
             {
-                fragmentImage.SetPixel(e.X, e.Y, tileImage.GetPixel(e.X, e.Y));
+
+                bmp.SetPixel(e.X, e.Y, original.GetPixel(e.X, e.Y));
             }
             else
             {
-                fragmentImage.SetPixel(e.X, e.Y, this.transparancy);
+                var locekd = bmp.LockBits(new Rectangle(e.X, e.Y, 1, 1), System.Drawing.Imaging.ImageLockMode.ReadWrite, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                unsafe
+                {
+                    uint* p = (uint*)locekd.Scan0.ToPointer();
+                    *p = 0;
+
+                }
+                //bmp.SetPixel(e.X, e.Y, this.transparancy);
+                bmp.UnlockBits(locekd);
             }
-            UpdateFragmentLayerImage(fragmentImage);
+            UpdateFragmentLayerImage(bmp);
         }
 
         //private float yaw;
@@ -333,7 +344,7 @@ namespace DeepTiles.Controls
         {
             this.InitializeComponent();
             this.Loaded += ProjectControl_Loaded;
-            var bmp = new Bitmap(1,1);
+            var bmp = new Bitmap(1, 1);
             this.transparancy = Color.Blue;
 
         }
