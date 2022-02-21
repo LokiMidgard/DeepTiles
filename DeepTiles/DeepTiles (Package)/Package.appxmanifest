@@ -8,8 +8,8 @@
 
   <Identity
     Name="bee3d2f4-3487-4fd1-86d9-063e585509ee"
-    Publisher="CN=patri"
-    Version="1.0.0.0" />
+    Publisher="CN=Midgard"
+    Version="0.1.0.0" />
 
   <Properties>
     <DisplayName>DeepTiles (Package)</DisplayName>

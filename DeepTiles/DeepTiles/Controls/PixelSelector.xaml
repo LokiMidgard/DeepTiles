@@ -9,10 +9,13 @@
 
     <Border >
         <Grid >
-
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
             <Image  Width="300" Height="300" x:Name="background"  Source="{x:Bind Tile.Image.Source, Mode=OneWay}"  />
             <Image  Width="300" Height="300" x:Name="adoner" Opacity="0.5" Source="{x:Bind AdonerSource,Mode=OneWay}"/>
-
-    </Grid>
+            <Button  x:Name="calculateMode" Content="Calculate Offset" Click="Button_Click" />
+        </Grid>
         </Border>
 </UserControl>

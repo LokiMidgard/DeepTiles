@@ -175,6 +175,8 @@ internal class FragmentMask
         set
         {
             var old = mask[x, y];
+            if (old == value)
+                return;
             mask[x, y] = value;
             MaskChanged?.Invoke(this, new MaskChangedEventArgs() { FragmentIndex = old, X = x, Y = y });
             MaskChanged?.Invoke(this, new MaskChangedEventArgs() { FragmentIndex = value, X = x, Y = y });

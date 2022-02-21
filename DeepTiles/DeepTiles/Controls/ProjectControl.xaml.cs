@@ -445,6 +445,7 @@ namespace DeepTiles.Controls
                 var line = ImageLoader.Instance.LoadLine(128, Windows.UI.Color.FromArgb(255, 255, 0, 255));
                 sprite = AddImage(line.Brush);
                 sprite.CenterPoint = new Vector3(0, 0, 0);
+                
                 sprite.TransformMatrix = Matrix4x4.Identity
                     * Matrix4x4.CreateRotationX(MathF.PI / 2)
                     * Matrix4x4.CreateTranslation(new Vector3(+16, +16, 0))

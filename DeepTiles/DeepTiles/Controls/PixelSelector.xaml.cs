@@ -73,7 +73,7 @@ namespace DeepTiles.Controls
             DependencyProperty.Register("AdonerSource", typeof(ImageSource), typeof(PixelSelector), new PropertyMetadata(null));
 
 
-
+        private bool isOffsetCalculation;
 
         public PixelSelector()
         {
@@ -89,8 +89,14 @@ namespace DeepTiles.Controls
                 return;
             var p = e.GetCurrentPoint(background);
 
-            this.Tile.FragmentMask[(int)(p.Position.X / background.ActualWidth * Tile.Width), (int)(p.Position.Y / background.ActualHeight * Tile.Height)] = (byte)this.SelectedLayer;
-            UpdateAdoner();
+            var x = (int)(p.Position.X / background.ActualWidth * Tile.Width);
+            var y = (int)(p.Position.Y / background.ActualHeight * Tile.Height);
+
+            if (x >= 0 && y >= 0 && x < this.Tile.FragmentMask.Width && y < this.Tile.FragmentMask.Height)
+            {
+                this.Tile.FragmentMask[(int)(p.Position.X / background.ActualWidth * Tile.Width), (int)(p.Position.Y / background.ActualHeight * Tile.Height)] = (byte)this.SelectedLayer;
+                UpdateAdoner();
+            }
         }
 
         protected override void OnPointerPressed(PointerRoutedEventArgs e)
@@ -101,8 +107,34 @@ namespace DeepTiles.Controls
 
             var p = e.GetCurrentPoint(background);
 
-            this.Tile.FragmentMask[(int)(p.Position.X / background.ActualWidth * Tile.Width), (int)(p.Position.Y / background.ActualHeight * Tile.Height)] = (byte)this.SelectedLayer;
-            UpdateAdoner();
+            var x = (int)(p.Position.X / background.ActualWidth * Tile.Width);
+            var y = (int)(p.Position.Y / background.ActualHeight * Tile.Height);
+
+            if (x >= 0 && y >= 0 && x < this.Tile.FragmentMask.Width && y < this.Tile.FragmentMask.Height)
+            {
+
+
+                if (isOffsetCalculation)
+                {
+                    isOffsetCalculation = false;
+                    calculateMode.Content = "Calculate Offset";
+                    var fragment = this.Tile.Fragments[this.SelectedLayer];
+                    if (fragment.Angle == 0)
+                    {
+                        fragment.Offset = (float)(p.Position.Y / background.ActualWidth);
+
+                    }
+                    else
+                    {
+                        fragment.Offset = -(1f - (float)(p.Position.Y / background.ActualWidth));
+                    }
+                }
+                else
+                {
+                    this.Tile.FragmentMask[(int)(p.Position.X / background.ActualWidth * Tile.Width), (int)(p.Position.Y / background.ActualHeight * Tile.Height)] = (byte)this.SelectedLayer;
+                    UpdateAdoner();
+                }
+            }
         }
 
         private void UpdateAdoner()
@@ -122,7 +154,7 @@ namespace DeepTiles.Controls
                     }
                     else
                     {
-                        bmp.SetPixel(x,y,Color.Transparent);
+                        bmp.SetPixel(x, y, Color.Transparent);
                     }
                 }
 
@@ -142,8 +174,26 @@ namespace DeepTiles.Controls
 
         }
 
-
-
-
+        private void Button_Click(object sender, RoutedEventArgs e)
+        {
+            if (isOffsetCalculation)
+            {
+                isOffsetCalculation = false;
+                calculateMode.Content = "Calculate Offset";
+            }
+            else
+            {
+                isOffsetCalculation = true;
+                var fragment = this.Tile.Fragments[this.SelectedLayer];
+                if (fragment.Angle == 0)
+                {
+                    calculateMode.Content = "Click where the floor (would) hit the front";
+                }
+                else
+                {
+                    calculateMode.Content = "Click where the wall (would) hit the floor";
+                }
+            }
+        }
     }
 }
